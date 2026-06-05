@@ -3062,6 +3062,12 @@ extern "C" bool wasm_write_memory(u32 address, u8* data, u32 count) {
 // [vscode-vamiga-debugger cpu profiler] CPU profiler control + readout.
 // Logic lives in Core/Profiler/CpuProfiler.{h,cpp}; these are thin wasm wrappers.
 
+// Per-capture timing measured around the profiled frame, so the host can convert
+// cycles to time without assuming a clock (handles CPU revision/overclock/boost and
+// PAL/NTSC): the actual CPU-clock cycles in one frame, and the video standard.
+static i64 gProfileFrameCycles = 0;
+static bool gProfileIsPAL = true;
+
 // Upload the per-code-location unwind table (one {cfa,r13,ra} entry per 2 bytes,
 // built by the extension from DWARF .debug_frame) and the program's text range.
 extern "C" bool wasm_profile_set_unwind(u8* data, u32 len, u32 startAddr, u32 endAddr) {
@@ -3092,7 +3098,11 @@ extern "C" bool wasm_profile_start(u32 numFrames) {
 
     CpuProfiler::start();
     wrapper->emu->cpu.cpu->enableProfiling();
+    // Bracket the profiled frame(s) with the CPU clock to measure cycles/frame.
+    const i64 clockBefore = wrapper->emu->cpu.cpu->getClock();
     for (u32 i = 0; i < numFrames; i++) wrapper->emu->emu->computeFrame();
+    gProfileFrameCycles = (wrapper->emu->cpu.cpu->getClock() - clockBefore) / (i64)numFrames;
+    gProfileIsPAL = wrapper->emu->agnus.agnus->isPAL();
     wrapper->emu->cpu.cpu->disableProfiling();
     CpuProfiler::stop();
     return true;
@@ -3118,10 +3128,12 @@ extern "C" const char* wasm_profile_get_data() {
   u32 words = CpuProfiler::count();
   // Include capture diagnostics so the host can explain an empty result.
   sprintf(result_buffer,
-    "{\"address\":%lu, \"size\":%lu, \"start\":%lu, \"end\":%lu, \"total\":%lu, \"inRange\":%lu}",
+    "{\"address\":%lu, \"size\":%lu, \"start\":%lu, \"end\":%lu, \"total\":%lu, \"inRange\":%lu, "
+    "\"frameCycles\":%lld, \"isPAL\":%s}",
     (unsigned long)data, (unsigned long)(words * 4),
     (unsigned long)CpuProfiler::rangeStart(), (unsigned long)CpuProfiler::rangeEnd(),
-    (unsigned long)CpuProfiler::totalInstr(), (unsigned long)CpuProfiler::inRangeInstr());
+    (unsigned long)CpuProfiler::totalInstr(), (unsigned long)CpuProfiler::inRangeInstr(),
+    (long long)gProfileFrameCycles, gProfileIsPAL ? "true" : "false");
   return result_buffer;
 }
 
