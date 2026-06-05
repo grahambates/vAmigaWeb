@@ -72,6 +72,14 @@ void beginInstr(u32 pc, u32 a5, u32 a7, i64 clock)
     gPc = pc; gA5 = a5; gA7 = a7; gClock = clock; gPending = true;
 }
 
+// Registers are captured pre-instruction (beginInstr) but memory is read post-instruction
+// (here, via spypeek32). For standard m68k calling convention this is safe: stack-growing
+// writes always go downward to [A7-n] (newly allocated space), while the DWARF unwind reads
+// upward from [A7+n] (existing caller frames). These regions are disjoint for every normal
+// prologue/epilogue instruction (move.l -(sp), jsr, rts, addq sp). The only case that would
+// cause a mismatch is code that writes to a positive sp+offset (modifying a caller's frame),
+// which well-behaved code never does. If that ever becomes an issue, move the spypeek32 calls
+// into beginInstr alongside the register snapshot.
 void endInstr(i64 clock)
 {
     if (!gPending) return;
@@ -106,8 +114,8 @@ void endInstr(i64 clock)
 
         u32 ret = gMem->spypeek32<Accessor::CPU>(cfa + (u32)(i32)e->ra);
         if (e->r13 != 0) a5 = gMem->spypeek32<Accessor::CPU>(cfa + (u32)(i32)e->r13);
+        if (cfa <= a7) break;                    // CFA must advance (stack grows down); same CFA = loop
         a7 = cfa;                                // caller's SP is the CFA
-        if (ret == pc) break;                    // no progress -> stop
         pc = ret;
     }
 
