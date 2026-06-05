@@ -416,6 +416,9 @@ static constexpr int CHECK_WP       = (1 << 8);
 // Enables checking for catchpoints.
 static constexpr int CHECK_CP       = (1 << 9);
 
+// [vscode-vamiga-debugger cpu profiler] Enables per-instruction profiling capture.
+static constexpr int PROFILING      = (1 << 10);
+
 }
 
 /* Instruction Flags

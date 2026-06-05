@@ -486,8 +486,14 @@ public:
     
     // Sets the CPU clock cycle count
     void setClock(i64 val) { clock = val; }
-    
-    
+
+    // [vscode-vamiga-debugger cpu profiler] Enables/disables the per-instruction
+    // profiler. Setting the flag forces execute() onto the slow path, where the
+    // profiler hooks fire (see CpuProfiler.h). Zero-cost when disabled.
+    void enableProfiling() { flags |= State::PROFILING; }
+    void disableProfiling() { flags &= ~State::PROFILING; }
+
+
     //
     // Accessing registers
     //

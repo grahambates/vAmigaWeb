@@ -24,6 +24,7 @@
 #include "OtherFile.h"
 #include "MutableFileSystem.h"
 #include "OSDebugger.h"
+#include "CpuProfiler.h" // [vscode-vamiga-debugger cpu profiler]
 
 #include "MemUtils.h"
 #include "MediaFileTypes.h"
@@ -3056,6 +3057,72 @@ extern "C" bool wasm_write_memory(u32 address, u8* data, u32 count) {
   } catch (...) {
     return false;
   }
+}
+
+// [vscode-vamiga-debugger cpu profiler] CPU profiler control + readout.
+// Logic lives in Core/Profiler/CpuProfiler.{h,cpp}; these are thin wasm wrappers.
+
+// Upload the per-code-location unwind table (one {cfa,r13,ra} entry per 2 bytes,
+// built by the extension from DWARF .debug_frame) and the program's text range.
+extern "C" bool wasm_profile_set_unwind(u8* data, u32 len, u32 startAddr, u32 endAddr) {
+  try {
+    CpuProfiler::setMemory(wrapper->emu->mem.mem);
+    CpuProfiler::setUnwind(data, len, startAddr, endAddr);
+    return true;
+  } catch (...) {
+    return false;
+  }
+}
+
+// Capture numFrames frames (Phase 1: 1) synchronously: enable the profiler, run
+// the frame(s) via computeFrame(), then disable. Results are read with get_data().
+extern "C" bool wasm_profile_start(u32 numFrames) {
+  try {
+    if (numFrames == 0) numFrames = 1;
+
+    // Use computeFrame() (the synchronous run-loop primitive that emulates one full
+    // frame right now), NOT finishFrame(): finishFrame() merely ARMS an end-of-frame
+    // trap for the async render loop, so it executes 0 instructions synchronously and
+    // also halts the emulator when the trap later fires. computeFrame() runs the CPU
+    // immediately and leaves the run state untouched, so execution continues after.
+    //
+    // First call finishes the current partial frame (alignment), so each profiled
+    // frame below is captured whole from its first instruction.
+    wrapper->emu->emu->computeFrame();
+
+    CpuProfiler::start();
+    wrapper->emu->cpu.cpu->enableProfiling();
+    for (u32 i = 0; i < numFrames; i++) wrapper->emu->emu->computeFrame();
+    wrapper->emu->cpu.cpu->disableProfiling();
+    CpuProfiler::stop();
+    return true;
+  } catch (...) {
+    wrapper->emu->cpu.cpu->disableProfiling();
+    CpuProfiler::stop();
+    printf("[cpu-profiler] wasm_profile_start: EXCEPTION\n");
+    return false;
+  }
+}
+
+// Safety stop (idempotent) — capture is normally self-contained in start().
+extern "C" void wasm_profile_stop() {
+  wrapper->emu->cpu.cpu->disableProfiling();
+  CpuProfiler::stop();
+}
+
+// Return {address,size} of the raw u32 profile stream for the JS side to read off
+// HEAPU8 (same pattern as snapshots). Valid until the next wasm_profile_start().
+extern "C" const char* wasm_profile_get_data() {
+  static char result_buffer[256];
+  const u32* data = CpuProfiler::data();
+  u32 words = CpuProfiler::count();
+  // Include capture diagnostics so the host can explain an empty result.
+  sprintf(result_buffer,
+    "{\"address\":%lu, \"size\":%lu, \"start\":%lu, \"end\":%lu, \"total\":%lu, \"inRange\":%lu}",
+    (unsigned long)data, (unsigned long)(words * 4),
+    (unsigned long)CpuProfiler::rangeStart(), (unsigned long)CpuProfiler::rangeEnd(),
+    (unsigned long)CpuProfiler::totalInstr(), (unsigned long)CpuProfiler::inRangeInstr());
+  return result_buffer;
 }
 
 extern "C" const char* wasm_jump(u32 address) {
