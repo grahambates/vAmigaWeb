@@ -5,6 +5,8 @@
  */
 
 #include <stdio.h>
+#include <unordered_map>
+#include <unordered_set>
 #include "config.h"
 #include "VAmiga.h"
 #include "VAmigaTypes.h"
@@ -3625,16 +3627,14 @@ extern "C" const char *wasm_get_all_custom_registers() {
 
   result_buffer = "{";
 
-  // Custom chip registers in address order - register names abstracted (read/write pairs use unified names without 'R' suffix)
-  sprintf(hex_buf, "\"0x%04X\"", wrapper->emu->mem.mem->spypeekCustom16(0x002));
-  result_buffer += "\"DMACON\":{\"addr\":\"0x002\",\"value\":" + std::string(hex_buf) + "},";
-
+  // Beam position - read from VPOSR/VHPOSR ($004/$006)
   sprintf(hex_buf, "\"0x%04X\"", wrapper->emu->mem.mem->spypeekCustom16(0x004));
   result_buffer += "\"VPOS\":{\"addr\":\"0x004\",\"value\":" + std::string(hex_buf) + "},";
 
   sprintf(hex_buf, "\"0x%04X\"", wrapper->emu->mem.mem->spypeekCustom16(0x006));
   result_buffer += "\"VHPOS\":{\"addr\":\"0x006\",\"value\":" + std::string(hex_buf) + "},";
 
+  // DSKDAT ($008) - disk data early read (read addr, unified name)
   sprintf(hex_buf, "\"0x%04X\"", wrapper->emu->mem.mem->spypeekCustom16(0x008));
   result_buffer += "\"DSKDAT\":{\"addr\":\"0x008\",\"value\":" + std::string(hex_buf) + "},";
 
@@ -3647,31 +3647,43 @@ extern "C" const char *wasm_get_all_custom_registers() {
   sprintf(hex_buf, "\"0x%04X\"", wrapper->emu->mem.mem->spypeekCustom16(0x00E));
   result_buffer += "\"CLXDAT\":{\"addr\":\"0x00E\",\"value\":" + std::string(hex_buf) + "},";
 
-  sprintf(hex_buf, "\"0x%04X\"", wrapper->emu->mem.mem->spypeekCustom16(0x010));
-  result_buffer += "\"ADKCON\":{\"addr\":\"0x010\",\"value\":" + std::string(hex_buf) + "},";
-
   sprintf(hex_buf, "\"0x%04X\"", wrapper->emu->mem.mem->spypeekCustom16(0x012));
   result_buffer += "\"POT0DAT\":{\"addr\":\"0x012\",\"value\":" + std::string(hex_buf) + "},";
 
   sprintf(hex_buf, "\"0x%04X\"", wrapper->emu->mem.mem->spypeekCustom16(0x014));
   result_buffer += "\"POT1DAT\":{\"addr\":\"0x014\",\"value\":" + std::string(hex_buf) + "},";
 
+  // POTGO ($016) - read addr for pot, unified name with write reg
   sprintf(hex_buf, "\"0x%04X\"", wrapper->emu->mem.mem->spypeekCustom16(0x016));
   result_buffer += "\"POTGO\":{\"addr\":\"0x016\",\"value\":" + std::string(hex_buf) + "},";
 
+  // SERDAT ($018) - serial data read addr, unified name with write reg
   sprintf(hex_buf, "\"0x%04X\"", wrapper->emu->mem.mem->spypeekCustom16(0x018));
   result_buffer += "\"SERDAT\":{\"addr\":\"0x018\",\"value\":" + std::string(hex_buf) + "},";
 
+  // DSKBYT ($01A) - disk byte/status read (read addr, R suffix stripped)
   sprintf(hex_buf, "\"0x%04X\"", wrapper->emu->mem.mem->spypeekCustom16(0x01A));
   result_buffer += "\"DSKBYT\":{\"addr\":\"0x01A\",\"value\":" + std::string(hex_buf) + "},";
 
-  sprintf(hex_buf, "\"0x%04X\"", wrapper->emu->mem.mem->spypeekCustom16(0x01C));
-  result_buffer += "\"INTENA\":{\"addr\":\"0x01C\",\"value\":" + std::string(hex_buf) + "},";
+  // DSKPT ($020) - disk pointer (32-bit)
+  sprintf(hex_buf, "\"0x%08X\"", agnus->dskpt);
+  result_buffer += "\"DSKPT\":{\"addr\":\"0x020\",\"value\":" + std::string(hex_buf) + "},";
 
-  sprintf(hex_buf, "\"0x%04X\"", wrapper->emu->mem.mem->spypeekCustom16(0x01E));
-  result_buffer += "\"INTREQ\":{\"addr\":\"0x01E\",\"value\":" + std::string(hex_buf) + "},";
+  // Disk controller registers
+  auto diskInfo = wrapper->emu->paula.diskController.getInfo();
+  sprintf(hex_buf, "\"0x%04X\"", diskInfo.dsklen);
+  result_buffer += "\"DSKLEN\":{\"addr\":\"0x024\",\"value\":" + std::string(hex_buf) + "},";
 
-  // Blitter registers ($040-$07E) - from blitter info
+  // COPCON ($02E) - coprocessor control (cdang = bit 1)
+  auto copperInfo = wrapper->emu->agnus.copper.getInfo();
+  sprintf(hex_buf, "\"0x%04X\"", copperInfo.cdang ? 0x0002 : 0x0000);
+  result_buffer += "\"COPCON\":{\"addr\":\"0x02E\",\"value\":" + std::string(hex_buf) + "},";
+
+  // SERPER ($032) - serial port period and control
+  sprintf(hex_buf, "\"0x%04X\"", wrapper->emu->paula.uart.getInfo().serper);
+  result_buffer += "\"SERPER\":{\"addr\":\"0x032\",\"value\":" + std::string(hex_buf) + "},";
+
+  // Blitter registers ($040-$074)
   auto blitterInfo = wrapper->emu->agnus.blitter.getInfo();
   sprintf(hex_buf, "\"0x%04X\"", blitterInfo.bltcon0);
   result_buffer += "\"BLTCON0\":{\"addr\":\"0x040\",\"value\":" + std::string(hex_buf) + "},";
@@ -3697,20 +3709,54 @@ extern "C" const char *wasm_get_all_custom_registers() {
   sprintf(hex_buf, "\"0x%08X\"", blitterInfo.bltdpt);
   result_buffer += "\"BLTDPT\":{\"addr\":\"0x054\",\"value\":" + std::string(hex_buf) + "},";
 
+  sprintf(hex_buf, "\"0x%04X\"", (u16)blitterInfo.bltcmod);
+  result_buffer += "\"BLTCMOD\":{\"addr\":\"0x060\",\"value\":" + std::string(hex_buf) + "},";
+
+  sprintf(hex_buf, "\"0x%04X\"", (u16)blitterInfo.bltbmod);
+  result_buffer += "\"BLTBMOD\":{\"addr\":\"0x062\",\"value\":" + std::string(hex_buf) + "},";
+
+  sprintf(hex_buf, "\"0x%04X\"", (u16)blitterInfo.bltamod);
+  result_buffer += "\"BLTAMOD\":{\"addr\":\"0x064\",\"value\":" + std::string(hex_buf) + "},";
+
+  sprintf(hex_buf, "\"0x%04X\"", (u16)blitterInfo.bltdmod);
+  result_buffer += "\"BLTDMOD\":{\"addr\":\"0x066\",\"value\":" + std::string(hex_buf) + "},";
+
+  sprintf(hex_buf, "\"0x%04X\"", blitterInfo.chold);
+  result_buffer += "\"BLTCDAT\":{\"addr\":\"0x070\",\"value\":" + std::string(hex_buf) + "},";
+
+  sprintf(hex_buf, "\"0x%04X\"", blitterInfo.bhold);
+  result_buffer += "\"BLTBDAT\":{\"addr\":\"0x072\",\"value\":" + std::string(hex_buf) + "},";
+
+  sprintf(hex_buf, "\"0x%04X\"", blitterInfo.ahold);
+  result_buffer += "\"BLTADAT\":{\"addr\":\"0x074\",\"value\":" + std::string(hex_buf) + "},";
+
+  // BLTDDAT ($000) - blitter destination early read
+  sprintf(hex_buf, "\"0x%04X\"", blitterInfo.dhold);
+  result_buffer += "\"BLTDDAT\":{\"addr\":\"0x000\",\"value\":" + std::string(hex_buf) + "},";
+
+  // DENISEID ($07C) - Denise chip revision
+  sprintf(hex_buf, "\"0x%04X\"", denise->spypeekDENISEID());
+  result_buffer += "\"DENISEID\":{\"addr\":\"0x07C\",\"value\":" + std::string(hex_buf) + "},";
+
+  sprintf(hex_buf, "\"0x%04X\"", diskInfo.dsksync);
+  result_buffer += "\"DSKSYNC\":{\"addr\":\"0x07E\",\"value\":" + std::string(hex_buf) + "},";
+
   // Copper registers ($080-$086)
-  auto copperInfo = wrapper->emu->agnus.copper.getInfo();
   sprintf(hex_buf, "\"0x%08X\"", copperInfo.cop1lc);
   result_buffer += "\"COP1LC\":{\"addr\":\"0x080\",\"value\":" + std::string(hex_buf) + "},";
 
   sprintf(hex_buf, "\"0x%08X\"", copperInfo.cop2lc);
   result_buffer += "\"COP2LC\":{\"addr\":\"0x084\",\"value\":" + std::string(hex_buf) + "},";
 
-  // Display window registers ($08E-$096)
+  // Display window and fetch registers ($08E-$094)
   sprintf(hex_buf, "\"0x%04X\"", denise->diwstrt);
   result_buffer += "\"DIWSTRT\":{\"addr\":\"0x08E\",\"value\":" + std::string(hex_buf) + "},";
 
   sprintf(hex_buf, "\"0x%04X\"", denise->diwstop);
   result_buffer += "\"DIWSTOP\":{\"addr\":\"0x090\",\"value\":" + std::string(hex_buf) + "},";
+
+  sprintf(hex_buf, "\"0x%04X\"", agnus->sequencer.diwhigh);
+  result_buffer += "\"DIWHIGH\":{\"addr\":\"0x1E4\",\"value\":" + std::string(hex_buf) + "},";
 
   sprintf(hex_buf, "\"0x%04X\"", agnus->sequencer.ddfstrt);
   result_buffer += "\"DDFSTRT\":{\"addr\":\"0x092\",\"value\":" + std::string(hex_buf) + "},";
@@ -3724,7 +3770,7 @@ extern "C" const char *wasm_get_all_custom_registers() {
   sprintf(hex_buf, "\"0x%04X\"", denise->clxcon);
   result_buffer += "\"CLXCON\":{\"addr\":\"0x098\",\"value\":" + std::string(hex_buf) + "},";
 
-  // Paula registers ($09C-$09E)
+  // Paula registers ($09A-$09E)
   auto paulaInfo = wrapper->emu->paula.getInfo();
   sprintf(hex_buf, "\"0x%04X\"", paulaInfo.intena);
   result_buffer += "\"INTENA\":{\"addr\":\"0x09A\",\"value\":" + std::string(hex_buf) + "},";
@@ -3735,13 +3781,16 @@ extern "C" const char *wasm_get_all_custom_registers() {
   sprintf(hex_buf, "\"0x%04X\"", paulaInfo.adkcon);
   result_buffer += "\"ADKCON\":{\"addr\":\"0x09E\",\"value\":" + std::string(hex_buf) + "},";
 
-  // Audio channel pointers and data ($0A0-$0DF)
+  // Audio channel location pointers and registers ($0A0-$0DA)
   auto aud0Info = wrapper->emu->paula.audioChannel0.getInfo();
   auto aud1Info = wrapper->emu->paula.audioChannel1.getInfo();
   auto aud2Info = wrapper->emu->paula.audioChannel2.getInfo();
   auto aud3Info = wrapper->emu->paula.audioChannel3.getInfo();
 
-  // Audio Channel 0 ($0A0-$0AB)
+  // Audio Channel 0 ($0A0-$0AA)
+  sprintf(hex_buf, "\"0x%08X\"", agnus->audlc[0]);
+  result_buffer += "\"AUD0LC\":{\"addr\":\"0x0A0\",\"value\":" + std::string(hex_buf) + "},";
+
   sprintf(hex_buf, "\"0x%04X\"", aud0Info.audlenLatch);
   result_buffer += "\"AUD0LEN\":{\"addr\":\"0x0A4\",\"value\":" + std::string(hex_buf) + "},";
 
@@ -3754,7 +3803,10 @@ extern "C" const char *wasm_get_all_custom_registers() {
   sprintf(hex_buf, "\"0x%04X\"", aud0Info.auddat);
   result_buffer += "\"AUD0DAT\":{\"addr\":\"0x0AA\",\"value\":" + std::string(hex_buf) + "},";
 
-  // Audio Channel 1 ($0B0-$0BB)
+  // Audio Channel 1 ($0B0-$0BA)
+  sprintf(hex_buf, "\"0x%08X\"", agnus->audlc[1]);
+  result_buffer += "\"AUD1LC\":{\"addr\":\"0x0B0\",\"value\":" + std::string(hex_buf) + "},";
+
   sprintf(hex_buf, "\"0x%04X\"", aud1Info.audlenLatch);
   result_buffer += "\"AUD1LEN\":{\"addr\":\"0x0B4\",\"value\":" + std::string(hex_buf) + "},";
 
@@ -3767,7 +3819,10 @@ extern "C" const char *wasm_get_all_custom_registers() {
   sprintf(hex_buf, "\"0x%04X\"", aud1Info.auddat);
   result_buffer += "\"AUD1DAT\":{\"addr\":\"0x0BA\",\"value\":" + std::string(hex_buf) + "},";
 
-  // Audio Channel 2 ($0C0-$0CB)
+  // Audio Channel 2 ($0C0-$0CA)
+  sprintf(hex_buf, "\"0x%08X\"", agnus->audlc[2]);
+  result_buffer += "\"AUD2LC\":{\"addr\":\"0x0C0\",\"value\":" + std::string(hex_buf) + "},";
+
   sprintf(hex_buf, "\"0x%04X\"", aud2Info.audlenLatch);
   result_buffer += "\"AUD2LEN\":{\"addr\":\"0x0C4\",\"value\":" + std::string(hex_buf) + "},";
 
@@ -3780,7 +3835,10 @@ extern "C" const char *wasm_get_all_custom_registers() {
   sprintf(hex_buf, "\"0x%04X\"", aud2Info.auddat);
   result_buffer += "\"AUD2DAT\":{\"addr\":\"0x0CA\",\"value\":" + std::string(hex_buf) + "},";
 
-  // Audio Channel 3 ($0D0-$0DB)
+  // Audio Channel 3 ($0D0-$0DA)
+  sprintf(hex_buf, "\"0x%08X\"", agnus->audlc[3]);
+  result_buffer += "\"AUD3LC\":{\"addr\":\"0x0D0\",\"value\":" + std::string(hex_buf) + "},";
+
   sprintf(hex_buf, "\"0x%04X\"", aud3Info.audlenLatch);
   result_buffer += "\"AUD3LEN\":{\"addr\":\"0x0D4\",\"value\":" + std::string(hex_buf) + "},";
 
@@ -3812,7 +3870,7 @@ extern "C" const char *wasm_get_all_custom_registers() {
   sprintf(hex_buf, "\"0x%08X\"", agnus->bplpt[5]);
   result_buffer += "\"BPL6PT\":{\"addr\":\"0x0F4\",\"value\":" + std::string(hex_buf) + "},";
 
-  // Display control registers ($100-$10A)
+  // Bitplane control and modulo registers ($100-$10A)
   sprintf(hex_buf, "\"0x%04X\"", denise->bplcon0);
   result_buffer += "\"BPLCON0\":{\"addr\":\"0x100\",\"value\":" + std::string(hex_buf) + "},";
 
@@ -3895,7 +3953,7 @@ extern "C" const char *wasm_get_all_custom_registers() {
     result_buffer += "\"SPR" + std::to_string(i) + "DATB\":{\"addr\":\"" + addr_str + "\",\"value\":" + std::string(hex_buf) + "},";
   }
 
-  // Color palette ($180-$1BE) - all 32 colors
+  // Color palette ($180-$1BE) - all 32 colors (last entry, no trailing comma)
   for (int i = 0; i < 32; i++) {
     char addr_str[8];
     sprintf(addr_str, "0x%03X", 0x180 + (i * 2));
@@ -3905,14 +3963,6 @@ extern "C" const char *wasm_get_all_custom_registers() {
     result_buffer += "\"" + std::string(colorName) + "\":{\"addr\":\"" + addr_str + "\",\"value\":" + std::string(hex_buf) + "}";
     if (i < 31) result_buffer += ",";
   }
-
-  // Add disk controller registers if available
-  auto diskInfo = wrapper->emu->paula.diskController.getInfo();
-  sprintf(hex_buf, "\"0x%04X\"", diskInfo.dsklen);
-  result_buffer += ",\"DSKLEN\":{\"addr\":\"0x024\",\"value\":" + std::string(hex_buf) + "},";
-
-  sprintf(hex_buf, "\"0x%04X\"", diskInfo.dsksync);
-  result_buffer += "\"DSKSYNC\":{\"addr\":\"0x07E\",\"value\":" + std::string(hex_buf) + "}";
 
   result_buffer += "}";
 
@@ -3940,24 +3990,21 @@ extern "C" const char *wasm_set_custom_register(const char* reg_name, u32 value)
   try {
     std::string regName(reg_name);
 
-    // Handle read variants by mapping them to write variants
-    if (regName == "DMACONR") regName = "DMACON";
-    else if (regName == "ADKCONR") regName = "ADKCON";
-    else if (regName == "INTENAR") regName = "INTENA";
-    else if (regName == "INTREQR") regName = "INTREQ";
-    else if (regName == "VPOSR") regName = "VPOS";
-    else if (regName == "VHPOSR") regName = "VHPOS";
-    else if (regName == "DSKDATR") regName = "DSKDAT";
-    else if (regName == "POTGOR") regName = "POTGO";
-    else if (regName == "SERDATR") regName = "SERDAT";
-    else if (regName == "DSKBYTR") regName = "DSKBYT";
-
     // 16-bit register lookup table
     static const std::unordered_map<std::string, u16> reg16_map = {
       // Main control registers
       {"DMACON", 0x096}, {"INTENA", 0x09A}, {"INTREQ", 0x09C}, {"ADKCON", 0x09E},
+      // Copper control
+      {"COPCON", 0x02E},
+      // Serial port
+      {"SERDAT", 0x030}, {"SERPER", 0x032},
+      // Disk
+      {"DSKLEN", 0x024}, {"DSKDAT", 0x026}, {"DSKSYNC", 0x07E},
       // Blitter control
       {"BLTCON0", 0x040}, {"BLTCON1", 0x042}, {"BLTAFWM", 0x044}, {"BLTALWM", 0x046},
+      {"BLTSIZE", 0x058}, {"BLTCON0L", 0x05A}, {"BLTSIZV", 0x05C}, {"BLTSIZH", 0x05E},
+      {"BLTCMOD", 0x060}, {"BLTBMOD", 0x062}, {"BLTAMOD", 0x064}, {"BLTDMOD", 0x066},
+      {"BLTCDAT", 0x070}, {"BLTBDAT", 0x072}, {"BLTADAT", 0x074},
       // Display window
       {"DIWSTRT", 0x08E}, {"DIWSTOP", 0x090}, {"DDFSTRT", 0x092}, {"DDFSTOP", 0x094}, {"CLXCON", 0x098},
       // Display control
@@ -3971,12 +4018,12 @@ extern "C" const char *wasm_set_custom_register(const char* reg_name, u32 value)
       {"AUD1LEN", 0x0B4}, {"AUD1PER", 0x0B6}, {"AUD1VOL", 0x0B8}, {"AUD1DAT", 0x0BA},
       {"AUD2LEN", 0x0C4}, {"AUD2PER", 0x0C6}, {"AUD2VOL", 0x0C8}, {"AUD2DAT", 0x0CA},
       {"AUD3LEN", 0x0D4}, {"AUD3PER", 0x0D6}, {"AUD3VOL", 0x0D8}, {"AUD3DAT", 0x0DA},
-      // Disk controller
-      {"DSKLEN", 0x024}, {"DSKSYNC", 0x07E}
     };
 
     // 32-bit register lookup table (high addr, low addr)
     static const std::unordered_map<std::string, std::pair<u16, u16>> reg32_map = {
+      // Disk pointer
+      {"DSKPT", {0x020, 0x022}},
       // Copper
       {"COP1LC", {0x080, 0x082}}, {"COP2LC", {0x084, 0x086}},
       // Blitter pointers
@@ -4034,11 +4081,13 @@ extern "C" const char *wasm_set_custom_register(const char* reg_name, u32 value)
       }
     }
 
-    // Error handling for specific read-only data registers
-    if (regName == "JOY0DAT" || regName == "JOY1DAT" ||
-        regName == "POT0DAT" || regName == "POT1DAT" ||
-        regName == "CLXDAT") {
-      snprintf(result_buffer, sizeof(result_buffer), "{\"error\":true,\"message\":\"Read-only hardware data register\",\"register\":\"%s\"}", reg_name);
+    // Error handling for read-only registers
+    static const std::unordered_set<std::string> readonly_regs = {
+      "JOY0DAT", "JOY1DAT", "POT0DAT", "POT1DAT", "CLXDAT",
+      "VPOS", "VHPOS", "DSKBYT", "BLTDDAT", "DENISEID"
+    };
+    if (readonly_regs.count(regName)) {
+      snprintf(result_buffer, sizeof(result_buffer), "{\"error\":true,\"message\":\"Read-only hardware register\",\"register\":\"%s\"}", reg_name);
       return result_buffer;
     }
 
