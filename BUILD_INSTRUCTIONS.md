@@ -19,6 +19,6 @@ cmake --build . -j8
 Copy files to plugin dir:
 
 ```shell
-cp vAmiga.js ../../vscode-vamiga-debugger/vamiga/
-cp vAmiga.wasm ../../vscode-vamiga-debugger/vamiga/
+cp vAmiga.js ../../vamiga/
+cp vAmiga.wasm ../../vamiga/
 ```
