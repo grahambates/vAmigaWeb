@@ -25,6 +25,7 @@
 #include "MutableFileSystem.h"
 #include "OSDebugger.h"
 #include "CpuProfiler.h" // [vscode-vamiga-debugger cpu profiler]
+#include "DmaProfiler.h" // [vscode-vamiga-debugger dma profiler]
 
 #include "MemUtils.h"
 #include "MediaFileTypes.h"
@@ -3098,6 +3099,11 @@ extern "C" bool wasm_profile_start(u32 numFrames) {
 
     CpuProfiler::start();
     wrapper->emu->cpu.cpu->enableProfiling();
+    // [vscode-vamiga-debugger dma profiler] Capture DMA in the SAME measured frame so
+    // the DMA line shares the CPU flame's timeline. start() snapshots chip/slow RAM at
+    // this frame boundary; the per-line/per-cycle hooks fire during computeFrame().
+    DmaProfiler::setMemory(wrapper->emu->mem.mem);
+    DmaProfiler::start();
     // Bracket the profiled frame(s) with the CPU clock to measure cycles/frame.
     const i64 clockBefore = wrapper->emu->cpu.cpu->getClock();
     for (u32 i = 0; i < numFrames; i++) wrapper->emu->emu->computeFrame();
@@ -3105,10 +3111,12 @@ extern "C" bool wasm_profile_start(u32 numFrames) {
     gProfileIsPAL = wrapper->emu->agnus.agnus->isPAL();
     wrapper->emu->cpu.cpu->disableProfiling();
     CpuProfiler::stop();
+    DmaProfiler::stop();
     return true;
   } catch (...) {
     wrapper->emu->cpu.cpu->disableProfiling();
     CpuProfiler::stop();
+    DmaProfiler::stop();
     printf("[cpu-profiler] wasm_profile_start: EXCEPTION\n");
     return false;
   }
@@ -3134,6 +3142,29 @@ extern "C" const char* wasm_profile_get_data() {
     (unsigned long)CpuProfiler::rangeStart(), (unsigned long)CpuProfiler::rangeEnd(),
     (unsigned long)CpuProfiler::totalInstr(), (unsigned long)CpuProfiler::inRangeInstr(),
     (long long)gProfileFrameCycles, gProfileIsPAL ? "true" : "false");
+  return result_buffer;
+}
+
+// [vscode-vamiga-debugger dma profiler] Return {address,size} of the enriched DMA grid
+// (Cell[8]) for the JS side to read off HEAPU8. Captured in the same frame as the CPU
+// profile (wasm_profile_start); valid until the next wasm_profile_start().
+extern "C" const char* wasm_dma_get_data() {
+  static char result_buffer[128];
+  sprintf(result_buffer, "{\"address\":%lu, \"size\":%lu}",
+    (unsigned long)DmaProfiler::gridData(), (unsigned long)DmaProfiler::gridLen());
+  return result_buffer;
+}
+
+// [vscode-vamiga-debugger dma profiler] Return the reconstruction baseline snapshot
+// (chip + slow RAM) taken at capture start. Custom-register baseline is deferred
+// (customLen 0). Buffers are valid until the next wasm_profile_start().
+extern "C" const char* wasm_dma_get_snapshot() {
+  static char result_buffer[256];
+  sprintf(result_buffer,
+    "{\"chipAddr\":%lu, \"chipLen\":%lu, \"slowAddr\":%lu, \"slowLen\":%lu, "
+    "\"customAddr\":0, \"customLen\":0}",
+    (unsigned long)DmaProfiler::chipData(), (unsigned long)DmaProfiler::chipLen(),
+    (unsigned long)DmaProfiler::slowData(), (unsigned long)DmaProfiler::slowLen());
   return result_buffer;
 }
 

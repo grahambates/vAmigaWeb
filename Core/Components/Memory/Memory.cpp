@@ -9,6 +9,7 @@
 
 #include "config.h"
 #include "Memory.h"
+#include "DmaProfiler.h" // [vscode-vamiga-debugger dma profiler]
 #include "Emulator.h"
 #include "Agnus.h"
 #include "Checksum.h"
@@ -1648,6 +1649,7 @@ Memory::poke8 <Accessor::CPU, MemSrc::CHIP> (u32 addr, u8 value)
     stats.chipWrites.raw++;
     agnus.busAddr[agnus.pos.h] = addr;
     agnus.busData[agnus.pos.h] = dataBus;
+    if (DmaProfiler::enabled()) DmaProfiler::markWrite(agnus.pos.h, true); // [vscode-vamiga-debugger dma profiler]
 
     WRITE_CHIP_8(addr, value);
 }
@@ -1670,6 +1672,7 @@ Memory::poke16 <Accessor::CPU, MemSrc::CHIP> (u32 addr, u16 value)
     stats.chipWrites.raw++;
     agnus.busAddr[agnus.pos.h] = addr;
     agnus.busData[agnus.pos.h] = dataBus;
+    if (DmaProfiler::enabled()) DmaProfiler::markWrite(agnus.pos.h, false); // [vscode-vamiga-debugger dma profiler]
 
     WRITE_CHIP_16(addr, value);
 }
@@ -1686,7 +1689,8 @@ Memory::poke8 <Accessor::CPU, MemSrc::SLOW> (u32 addr, u8 value)
     stats.slowWrites.raw++;
     agnus.busAddr[agnus.pos.h] = addr;
     agnus.busData[agnus.pos.h] = dataBus;
-    
+    if (DmaProfiler::enabled()) DmaProfiler::markWrite(agnus.pos.h, true); // [vscode-vamiga-debugger dma profiler]
+
     WRITE_SLOW_8(addr, value);
 }
 
@@ -1702,7 +1706,8 @@ Memory::poke16 <Accessor::CPU, MemSrc::SLOW> (u32 addr, u16 value)
     stats.slowWrites.raw++;
     agnus.busAddr[agnus.pos.h] = addr;
     agnus.busData[agnus.pos.h] = dataBus;
-    
+    if (DmaProfiler::enabled()) DmaProfiler::markWrite(agnus.pos.h, false); // [vscode-vamiga-debugger dma profiler]
+
     WRITE_SLOW_16(addr, value);
 }
 
@@ -1800,7 +1805,8 @@ Memory::poke16 <Accessor::CPU, MemSrc::CUSTOM> (u32 addr, u16 value)
 
     agnus.busAddr[agnus.pos.h] = addr;
     agnus.busData[agnus.pos.h] = dataBus;
-    
+    if (DmaProfiler::enabled()) DmaProfiler::markWrite(agnus.pos.h, false); // [vscode-vamiga-debugger dma profiler]
+
     pokeCustom16<Accessor::CPU>(addr, value);
 }
 

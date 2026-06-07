@@ -306,7 +306,13 @@ private:
     u16 getHM(u32 addr) { return LO_BYTE(getVMHM(addr)); }
     
 public:
-    
+
+    // [vscode-vamiga-debugger dma profiler] Sub-state of the current copper command for
+    // the DMA line, from cop1ins (0 = MOVE, 1 = WAIT, 2 = SKIP). Matches the
+    // DmaProfiler COP_SUB_* values. Correct for the 2nd instruction word; the 1st-word
+    // fetch is approximated by the previous command's type.
+    u8 dmaSubState() const { return isWaitCmd() ? 1 : isSkipCmd() ? 2 : 0; }
+
     // Returns true if the Copper has no access to this custom register
     bool isIllegalAddress(u32 addr) const;
     

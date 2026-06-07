@@ -10,6 +10,7 @@
 #include "config.h"
 #include "Agnus.h"
 #include "Emulator.h"
+#include "DmaProfiler.h" // [vscode-vamiga-debugger dma profiler]
 
 namespace vamiga {
 
@@ -365,6 +366,10 @@ Agnus::executeUntilBusIsFree()
 
     // Assign bus to the CPU
     busOwner[pos.h] = BusOwner::CPU;
+
+    // [vscode-vamiga-debugger dma profiler] Tag this CPU bus cycle as Code or Data
+    // from Moira's function code (covers reads and writes; writes are always Data).
+    if (DmaProfiler::enabled()) DmaProfiler::markCpu(pos.h, cpu.fcIsProgram());
 }
 
 void
@@ -681,6 +686,11 @@ Agnus::eolHandler()
 
     // Pass control to the DMA debugger
     dmaDebugger.eolHandler();
+
+    // [vscode-vamiga-debugger dma profiler] Fold this line's bus arrays (+ the flags
+    // accumulated by the mark* hooks) into the frame grid, before pos.eol() advances
+    // the line and the busOwner table is cleared below.
+    if (DmaProfiler::enabled()) DmaProfiler::recordLine(pos.v, busOwner, busAddr, busData);
 
     // Move to the next line
     pos.eol();
