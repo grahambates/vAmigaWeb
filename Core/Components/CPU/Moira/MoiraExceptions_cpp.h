@@ -362,6 +362,11 @@ Moira::execException(M68kException exc, int nr)
     setSupervisorMode(true);
     clearTraceFlags();
 
+    // [vscode-vamiga-debugger cpu profiler] branch-stack: push the exception-entry frame
+    // (interrupted PC -> supervisor stack) so the handler nests under the interrupted code
+    // and the matching RTE has a frame to pop. reg.sp is the supervisor SSP here.
+    if (flags & State::PROFILING) vamiga::CpuProfiler::BranchStack::enterException(reg.pc, reg.sp);
+
     switch (exc) {
 
         case M68kException::BUS_ERROR:
@@ -564,6 +569,10 @@ Moira::execInterrupt(u8 level)
                 writeStackFrame0001<C>(status, reg.pc, 4 * queue.ird);
             }
     }
+
+    // [vscode-vamiga-debugger cpu profiler] branch-stack: push the interrupt-entry frame
+    // (interrupted PC -> supervisor stack); the matching RTE pops it. reg.sp is the SSP.
+    if (flags & State::PROFILING) vamiga::CpuProfiler::BranchStack::enterException(reg.pc, reg.sp);
 
     jumpToVector<C, AE_SET_CB3>(queue.ird);
 }

@@ -3,14 +3,27 @@
 //
 // A per-instruction CPU profiler ported from the vscode-amiga-debug / WinUAE
 // "cpu_profiler". While enabled it records, for every executed instruction in the
-// loaded program's text range, the reconstructed call stack (via DWARF CFA
-// unwinding of A5/A7) and the elapsed cycle count. The host (VS Code extension)
-// symbolicates and aggregates the flat output into a call tree / flame graph.
+// loaded program's text range, the reconstructed call stack and the elapsed cycle
+// count. The host (VS Code extension) symbolicates and aggregates the flat output
+// into a call tree / flame graph.
+//
+// Two call-stack reconstruction methods, selected automatically in start():
+//   * DWARF unwind (primary, C/C++): walks A5/A7 with the uploaded per-location
+//     {cfa,r13,ra} table. Used when a non-empty unwind table was uploaded; also
+//     yields inlined frames (host-side).
+//   * Runtime branch-stack (fallback, assembly/hunk with no DWARF .debug_frame):
+//     a shadow call stack maintained by JSR/BSR (push) / RTS/RTE (pop) /
+//     exception-entry hooks in Moira, ported from WinUAE's debugmem branch-stack
+//     (two stacks keyed on the S-bit; pop matched by return PC). Used when the
+//     uploaded unwind table is empty. See BranchStack below and FORK_NOTES.md.
+// The emitted stream format is identical for both, so the host is unaware which
+// produced it.
 //
 // This whole module is fork-local — upstream vAmiga has no file here, so it never
 // causes merge conflicts. It is wired in via a few one-line hooks tagged
 //   // [vscode-vamiga-debugger cpu profiler]
-// in Moira.cpp / MoiraTypes.h / CPU.{h,cpp} / main.cpp. See FORK_NOTES.md.
+// in Moira.cpp / MoiraExec_cpp.h / MoiraExceptions_cpp.h / MoiraTypes.h /
+// CPU.{h,cpp} / main.cpp. See FORK_NOTES.md.
 // -----------------------------------------------------------------------------
 
 #pragma once
@@ -42,10 +55,28 @@ void start();
 void stop();
 
 // Per-instruction hooks, called from Moira::execute() (slow path) only when the
-// PROFILING flag is set. beginInstr stashes the pre-execution PC/A5/A7 + clock;
-// endInstr computes the cycle delta, unwinds the call stack, and appends a record.
-void beginInstr(u32 pc, u32 a5, u32 a7, i64 clock);
+// PROFILING flag is set. beginInstr stashes the pre-execution PC/A5/A7 + clock and
+// the supervisor bit (which branch-stack the sample belongs to); endInstr computes
+// the cycle delta, reconstructs the call stack (DWARF or branch-stack), and appends
+// a record.
+void beginInstr(u32 pc, u32 a5, u32 a7, bool super, i64 clock);
 void endInstr(i64 clock);
+
+// Runtime branch-stack hooks, called from Moira's call/return/exception paths
+// (MoiraExec_cpp.h, MoiraExceptions_cpp.h) only when the PROFILING flag is set.
+// No-ops unless the active method is branch-stack (empty unwind table). Ported
+// 1:1 from WinUAE's debugmem branch_stack_push / _pop_rts / _pop_rte:
+//   push          = branch_stack_push      (JSR/BSR; `super` = S-bit at the call)
+//   popRts        = branch_stack_pop_rts   (RTS; `super` = S-bit at the return)
+//   popRte        = branch_stack_pop_rte   (RTE; always unwinds the super stack)
+//   enterException = branch_stack_push on the supervisor stack (exception/IRQ entry)
+// `returnPC` is the address the matching RTS/RTE will return to (WinUAE next_pc).
+namespace BranchStack {
+    void push(bool super, u32 returnPC, u32 a7AtCall);
+    void popRts(bool super, u32 returnPC);
+    void popRte(u32 returnPC);
+    void enterException(u32 returnPC, u32 a7);
+}
 
 // Raw output: a flat u32 stream of per-instruction records, leaf-first:
 //   [depth, pc0, pc1, ... pc(depth-1), cycleDelta]
