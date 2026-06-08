@@ -286,13 +286,20 @@ void popRts(bool super, u32 returnPC)
 
 // WinUAE branch_stack_pop_rte: always unwinds the SUPERVISOR stack (the exception
 // frame was pushed there; SR/mode is already restored by the time this runs). On a
-// match, pop to it; otherwise mirror WinUAE's "assume it matched" and pop one frame.
+// match, pop to it; on no match, leave the stack intact (see below).
 void popRte(u32 returnPC)
 {
     if (gMethod != Method::Branch) return;
     for (i32 i = (i32)gSuperCount - 1; i >= 0; i--)
         if (gSuperFrames[i].returnPC == returnPC) { gSuperCount = (u32)i; return; }
-    if (gSuperCount > 0) gSuperCount--;
+    // No match: no-op. (WinUAE pops one frame here — "assume it matched" — but for a
+    // one-frame profile capture a no-match RTE almost always means an interrupt that was
+    // ALREADY IN FLIGHT when the capture started: its entry never ran enterException
+    // (it fired during the pre-capture alignment frame, before PROFILING), so the
+    // returning PC matches nothing. Popping a frame would then discard a *legitimate*
+    // caller (the interrupted function's own return frame) and make that function look
+    // like a root until the next call rebuilds it. Leaving the stack intact is correct
+    // here; genuinely unbalanced super frames are cleared by the user-push reset.)
 }
 
 // WinUAE pushes exception/IRQ entry via the same branch_stack_push in supervisor
