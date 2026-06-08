@@ -59,7 +59,7 @@ void stop();
 // the supervisor bit (which branch-stack the sample belongs to); endInstr computes
 // the cycle delta, reconstructs the call stack (DWARF or branch-stack), and appends
 // a record.
-void beginInstr(u32 pc, u32 a5, u32 a7, bool super, i64 clock);
+void beginInstr(u32 pc, u32 a5, u32 a7, u32 usp, bool super, i64 clock);
 void endInstr(i64 clock);
 
 // Runtime branch-stack hooks, called from Moira's call/return/exception paths

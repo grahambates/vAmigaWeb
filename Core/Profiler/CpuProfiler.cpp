@@ -63,8 +63,8 @@ BranchFrame gSuperFrames[kMaxFrames]; u32 gSuperCount = 0;
 enum class Method { Dwarf, Branch };
 Method gMethod = Method::Dwarf;
 
-// Branch-stack seeding (see seedFromStack): the shadow stack starts empty mid-frame,
-// so seed it once from the live stack on the first profiled instruction.
+// Branch-stack seeding (see seedBranchStacks): the shadow stacks start empty mid-frame,
+// so seed them once from the live stack(s) on the first profiled instruction.
 bool gSeeded = false;
 
 inline const UnwindEntry *entryFor(u32 pc)
@@ -140,16 +140,16 @@ u32 unwindBranch(u32 *stack, u32 cap)
     return depth;
 }
 
-// Seed the (user) branch stack from the live stack at capture start, so samples
-// before the first observed JSR/BSR still carry their existing caller chain. Mirrors
-// the host-side heuristic in src/stackManager.ts guessStack (KEEP THE TWO IN SYNC):
-// scan 128 bytes from SP word-by-word; accept a longword that is an even, in-range
-// code address whose preceding 3 words contain a JSR (w & 0xffc0)==0x4e80 or
+// Seed a branch stack from the live machine stack at capture start, so samples before
+// the first observed JSR/BSR still carry their existing caller chain. Mirrors the
+// host-side heuristic in src/stackManager.ts guessStack (KEEP THE TWO IN SYNC): scan
+// 128 bytes from SP word-by-word; accept a longword that is an even, in-range code
+// address whose preceding 3 words contain a JSR (w & 0xffc0)==0x4e80 or
 // BSR (w & 0xff00)==0x6100; advance 4 on a hit, 2 otherwise. Best-effort: false
 // positives (data shaped like a return addr after a call-shaped word) and false
 // negatives (PEA+RTS, JMP tables) are possible — those frames just appear once a real
 // JSR/BSR is observed. (WinUAE didn't seed at all and built up from empty.)
-void seedFromStack(u32 sp)
+void seedStack(BranchFrame *frames, u32 &count, u32 sp)
 {
     if (!gMem) return;
 
@@ -173,7 +173,26 @@ void seedFromStack(u32 sp)
     // Stack memory near SP holds the most-recent (innermost) returns, so we discovered
     // innermost-first; push outermost-first to match real push order.
     for (i32 i = (i32)c - 1; i >= 0; i--)
-        pushFrame(gUserFrames, gUserCount, cand[i].returnPC, cand[i].a7AtCall);
+        pushFrame(frames, count, cand[i].returnPC, cand[i].a7AtCall);
+}
+
+// Seed both shadow stacks at capture start. Capture can begin in EITHER mode — and on
+// the Amiga it very often begins mid-interrupt (the frame-aligned start lands right
+// after VERTB fires), so the active A7 may be the SSP. The USER stack must therefore be
+// seeded from the real user SP: when in supervisor mode that is the saved `usp`, not the
+// active A7 (scanning the SSP there would lose the user call chain — the program's
+// _start/main frames — until the next user JSR/BSR rebuilds them). When we start in
+// supervisor mode there may also be a live handler call chain on the SSP, so seed the
+// supervisor stack from the active A7 too. One unavoidable gap: the exception-entry frame
+// of an interrupt already in flight at capture start is not recoverable by the JSR/BSR
+// heuristic (its return PC was stacked by the CPU, not pushed by a call), so that one
+// in-flight handler shows the user chain directly as its caller, without the precise
+// interrupted-PC bridge; handlers entered after capture starts get the bridge via
+// enterException.
+void seedBranchStacks(u32 a7, u32 usp, bool super)
+{
+    seedStack(gUserFrames, gUserCount, super ? usp : a7);
+    if (super) seedStack(gSuperFrames, gSuperCount, a7);
 }
 
 } // anonymous namespace
@@ -211,17 +230,19 @@ void stop()
            gTotalInstr, gInRange, (u32)gOutput.size());
 }
 
-void beginInstr(u32 pc, u32 a5, u32 a7, bool super, i64 clock)
+void beginInstr(u32 pc, u32 a5, u32 a7, u32 usp, bool super, i64 clock)
 {
     gPc = pc; gA5 = a5; gA7 = a7; gSampleSuper = super; gClock = clock; gPending = true;
 
-    // Branch-stack mode: seed the shadow stack from the live stack on the first
-    // profiled instruction (capture starts mid-frame, so the stack is non-empty but
-    // unobserved). Lazy here rather than in start() so the live SP is used.
+    // Branch-stack mode: seed the shadow stack(s) from the live stack on the first
+    // profiled instruction (capture starts mid-frame — often mid-interrupt — so the
+    // stacks are non-empty but unobserved). Lazy here rather than in start() so the live
+    // SP and S-bit are used. `usp` is the saved user SP (valid when super); seeding needs
+    // the real user SP, which is the active a7 in user mode but `usp` in supervisor mode.
     if (gMethod == Method::Branch) {
         if (!gSeeded) {
             gSeeded = true;
-            seedFromStack(a7);
+            seedBranchStacks(a7, usp, super);
         }
         // Snapshot the call stack NOW (pre-instruction), before this instruction's
         // JSR/BSR/RTS/RTE hook mutates the shadow stack. endInstr emits this stash.

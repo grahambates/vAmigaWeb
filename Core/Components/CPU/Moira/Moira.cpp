@@ -324,8 +324,8 @@ Moira::execute()
             debugger.logInstruction();
         }
 
-        // [vscode-vamiga-debugger cpu profiler] Snapshot pre-execution PC/A5/A7 + S-bit + clock.
-        if (flags & PROFILING) vamiga::CpuProfiler::beginInstr(reg.pc0, reg.a[5], reg.sp, reg.sr.s, clock);
+        // [vscode-vamiga-debugger cpu profiler] Snapshot pre-execution PC/A5/A7/USP + S-bit + clock.
+        if (flags & PROFILING) vamiga::CpuProfiler::beginInstr(reg.pc0, reg.a[5], reg.sp, reg.usp, reg.sr.s, clock);
 
         // Execute the instruction
         reg.pc += 2;
