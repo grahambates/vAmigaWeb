@@ -30,6 +30,16 @@ i64 gClock = 0;
 // empty capture (e.g. the frame ran only OS code).
 u32 gTotalInstr = 0, gInRange = 0;
 
+// [IRQ] cycle-gap tracking (WinUAE cpu_profiler mechanism): the clock at the end of the
+// previous profiled instruction. When an interrupt/exception is dispatched, the CPU runs
+// via checkForIrq/execException -> goto done, skipping beginInstr; that path lands in
+// endInstr with no pending instruction but with the clock advanced by the dispatch
+// overhead. endInstr emits that advance as a standalone [IRQ] marker (the gap is reliably
+// observable there, not at the following beginInstr). Seeded in start() with the capture-
+// start clock so a dispatch before the first instruction is still attributed.
+i64 gLastEndClock = 0;
+bool gHaveLastEnd = false;
+
 constexpr u32 kMaxDepth = 64;     // call-stack depth cap (runaway / recursion guard)
 
 // Branch-stack mode only: the shadow call stack is reconstructed PRE-instruction (in
@@ -206,7 +216,7 @@ void setUnwind(const u8 *data, u32 len, u32 startAddr, u32 endAddr)
     gEnd = endAddr;
 }
 
-void start()
+void start(i64 startClock)
 {
     gOutput.clear();
     gPending = false;
@@ -217,6 +227,13 @@ void start()
     gUserCount = 0;
     gSuperCount = 0;
     gSeeded = false;
+    // Seed the [IRQ] gap tracker with the capture-start (frame-boundary) clock. Capture is
+    // frame-aligned, so a VERTB interrupt is typically dispatched BEFORE the first profiled
+    // instruction; seeding (rather than suppressing the first gap) attributes that dispatch
+    // to [IRQ] instead of dropping its cycles. A capture that starts cleanly on an
+    // instruction has a zero first gap, so no spurious [IRQ] is emitted.
+    gLastEndClock = startClock;
+    gHaveLastEnd = true;
     gMethod = gUnwind.empty() ? Method::Branch : Method::Dwarf;
     gEnabled = true;
 }
@@ -322,22 +339,37 @@ void enterException(u32 returnPC, u32 a7)
 // into beginInstr alongside the register snapshot.
 void endInstr(i64 clock)
 {
-    if (!gPending) return;
+    if (!gPending) {
+        // A goto-done with no pending instruction = the interrupt/exception dispatch path
+        // (checkForIrq / execException jump straight to done, skipping beginInstr). The clock
+        // has advanced by the dispatch overhead since the previous instruction ended; emit
+        // that as an [IRQ] marker HERE — it's reliably observable at the dispatch site, unlike
+        // the following beginInstr (vAmiga doesn't surface it there). This is WinUAE's
+        // cycle-gap [IRQ], relocated to where vAmiga makes it visible. Advance gLastEndClock so
+        // the handler's first instruction doesn't re-count it.
+        if (gEnabled && gHaveLastEnd && clock > gLastEndClock) {
+            gOutput.push_back(1);
+            gOutput.push_back(IRQ_MARKER);
+            gOutput.push_back((u32)(clock - gLastEndClock));
+            gLastEndClock = clock;
+        }
+        return;
+    }
     gPending = false;
     if (!gEnabled || !gMem) return;
 
     gTotalInstr++;
-
-    // Only profile instructions inside the program's text range.
-    if (gPc < gStart || gPc >= gEnd) return;
-
-    gInRange++;
+    if (gPc >= gStart && gPc < gEnd) gInRange++;
 
     // Reconstruct the call stack leaf-first, by the method chosen in start().
     //  * Branch-stack: emit the PRE-instruction snapshot taken in beginInstr (the
     //    shadow stack has since been mutated by this instruction's call/return hook).
     //  * DWARF: unwind here, reading caller frames from memory (untouched by the
     //    instruction) using the pre-instruction registers from beginInstr.
+    // Out-of-program instructions (OS / ROM / external) are NOT dropped: their cycles
+    // must be accounted so the host's totals reach ~100% and the [Kickstart]/[External]
+    // buckets appear. DWARF can't unwind from an out-of-range leaf (unwindDwarf returns
+    // 0), so force the raw leaf PC; the host classifies it by address range.
     u32 stack[kMaxDepth];
     u32 depth;
     if (gMethod == Method::Branch) {
@@ -346,11 +378,17 @@ void endInstr(i64 clock)
     } else {
         depth = unwindDwarf(stack, kMaxDepth);
     }
+    if (depth == 0) { stack[0] = gPc; depth = 1; } // out-of-range leaf, no unwind context
 
     // Append: [depth, pc..., cycleDelta]
     gOutput.push_back(depth);
     for (u32 i = 0; i < depth; i++) gOutput.push_back(stack[i]);
     gOutput.push_back((u32)(clock - gClock));
+
+    // Mark where this instruction ended, so a following dispatch's no-op endInstr can
+    // measure the [IRQ] gap (the cycles between here and the handler's first instruction).
+    gLastEndClock = clock;
+    gHaveLastEnd = true;
 }
 
 const u32 *data() { return gOutput.data(); }

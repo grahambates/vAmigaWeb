@@ -36,6 +36,15 @@ class Memory;
 
 namespace CpuProfiler {
 
+// Synthetic leaf PC emitted for an [IRQ] sample: the cycle "gap" between one profiled
+// instruction and the next, which is the interrupt/exception dispatch overhead (that
+// dispatch skips beginInstr via checkForIrq -> goto done). A reserved value above any
+// real Amiga address; the host (src/profilerManager.ts) classifies it as "[IRQ]". Out-
+// of-program leaves keep their real PC and are classified host-side as [Kickstart]
+// (ROM range) or [External]. Mirrors WinUAE's 0x7fff'ffff IRQ marker. KEEP IN SYNC with
+// the IRQ_MARKER constant in src/profilerManager.ts.
+constexpr u32 IRQ_MARKER = 0xFFFFFFFE;
+
 // One unwind entry per 2-byte code location. Mirrors WinUAE's cpu_profiler_unwind
 // and the TS-side packer in src/unwindTable.ts:
 //   cfa = (cfaReg << 12) | cfaOffset, r13/ra = byte offsets from CFA.
@@ -50,8 +59,10 @@ void setMemory(Memory *mem);
 void setUnwind(const u8 *data, u32 len, u32 startAddr, u32 endAddr);
 
 // Capture control. start() clears the output buffer and enables capture; the
-// Moira PROFILING flag gates whether the per-instruction hooks below fire.
-void start();
+// Moira PROFILING flag gates whether the per-instruction hooks below fire. startClock
+// is the CPU clock at the capture's frame boundary — it seeds the [IRQ] gap tracker so
+// an interrupt dispatched before the first profiled instruction is still attributed.
+void start(i64 startClock);
 void stop();
 
 // Per-instruction hooks, called from Moira::execute() (slow path) only when the

@@ -3097,15 +3097,17 @@ extern "C" bool wasm_profile_start(u32 numFrames) {
     // frame below is captured whole from its first instruction.
     wrapper->emu->emu->computeFrame();
 
-    CpuProfiler::start();
+    // Bracket the profiled frame(s) with the CPU clock to measure cycles/frame, and seed the
+    // profiler's [IRQ] gap tracker with this frame-boundary clock so the first dispatch gap
+    // (a VERTB interrupt taken before the first profiled instruction) is attributed, not lost.
+    const i64 clockBefore = wrapper->emu->cpu.cpu->getClock();
+    CpuProfiler::start(clockBefore);
     wrapper->emu->cpu.cpu->enableProfiling();
     // [vscode-vamiga-debugger dma profiler] Capture DMA in the SAME measured frame so
     // the DMA line shares the CPU flame's timeline. start() snapshots chip/slow RAM at
     // this frame boundary; the per-line/per-cycle hooks fire during computeFrame().
     DmaProfiler::setMemory(wrapper->emu->mem.mem);
     DmaProfiler::start();
-    // Bracket the profiled frame(s) with the CPU clock to measure cycles/frame.
-    const i64 clockBefore = wrapper->emu->cpu.cpu->getClock();
     for (u32 i = 0; i < numFrames; i++) wrapper->emu->emu->computeFrame();
     gProfileFrameCycles = (wrapper->emu->cpu.cpu->getClock() - clockBefore) / (i64)numFrames;
     gProfileIsPAL = wrapper->emu->agnus.agnus->isPAL();
