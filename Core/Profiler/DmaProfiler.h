@@ -99,6 +99,7 @@ void markCopper(isize hpos, u8 subState);// Copper MOVE/WAIT/SKIP sub-state
 const u8 *gridData();   u32 gridLen();   // Cell[DMA_HPOS*DMA_VPOS] — the enriched grid
 const u8 *chipData();   u32 chipLen();   // chip RAM snapshot at capture start
 const u8 *slowData();   u32 slowLen();   // slow/bogo RAM snapshot (may be empty)
+const u8 *customData(); u32 customLen(); // custom-register baseline (256 u16, little-endian)
 
 }
 }

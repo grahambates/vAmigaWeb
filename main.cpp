@@ -3158,15 +3158,18 @@ extern "C" const char* wasm_dma_get_data() {
 }
 
 // [vscode-vamiga-debugger dma profiler] Return the reconstruction baseline snapshot
-// (chip + slow RAM) taken at capture start. Custom-register baseline is deferred
-// (customLen 0). Buffers are valid until the next wasm_profile_start().
+// (chip + slow RAM + custom-register file) taken at capture start. The custom baseline
+// is 256 little-endian u16 (0xDFF000..0x1FE) via a spypeek loop; write-only regs read
+// back 0 except DMACON, which is seeded from DMACONR. Buffers are valid until the next
+// wasm_profile_start().
 extern "C" const char* wasm_dma_get_snapshot() {
   static char result_buffer[256];
   sprintf(result_buffer,
     "{\"chipAddr\":%lu, \"chipLen\":%lu, \"slowAddr\":%lu, \"slowLen\":%lu, "
-    "\"customAddr\":0, \"customLen\":0}",
+    "\"customAddr\":%lu, \"customLen\":%lu}",
     (unsigned long)DmaProfiler::chipData(), (unsigned long)DmaProfiler::chipLen(),
-    (unsigned long)DmaProfiler::slowData(), (unsigned long)DmaProfiler::slowLen());
+    (unsigned long)DmaProfiler::slowData(), (unsigned long)DmaProfiler::slowLen(),
+    (unsigned long)DmaProfiler::customData(), (unsigned long)DmaProfiler::customLen());
   return result_buffer;
 }
 
