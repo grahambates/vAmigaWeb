@@ -240,6 +240,8 @@ Moira::execute()
 {
     using namespace State;
 
+    instrCount++;
+
     // Check the integrity of the IRQ flag
     if (reg.ipl > reg.sr.ipl || reg.ipl == 7) assert(flags & CHECK_IRQ);
 

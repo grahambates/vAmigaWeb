@@ -60,7 +60,14 @@ protected:
     
     // Number of elapsed cycles since power-up
     i64 clock {};
-    
+
+public:
+
+    // Number of executed instructions (monotonically increasing, for time-travel debugging)
+    u64 instrCount {};
+
+protected:
+
     // The CPU's register set
     Registers reg {};
     

@@ -131,6 +131,7 @@ private:
         << slowCycles
 
         // Items from Moira class
+        << instrCount
         << clock
         << reg.pc
         << reg.pc0

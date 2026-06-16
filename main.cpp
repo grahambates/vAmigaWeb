@@ -2582,6 +2582,78 @@ extern "C" void wasm_step_over() { wrapper->emu->stepOver(); }
 
 extern "C" void wasm_step_into() { wrapper->emu->stepInto(); }
 
+// Time-travel replay: result registers for returning 64-bit values as lo/hi u32 pairs
+static u32 g_instr_count_lo = 0, g_instr_count_hi = 0;
+static u32 g_replay_scan_lo = 0, g_replay_scan_hi = 0;
+static constexpr uint64_t REPLAY_NO_MATCH = UINT64_MAX;
+
+extern "C" void wasm_read_instr_count() {
+    uint64_t count = wrapper->emu->cpu.cpu->instrCount;
+    g_instr_count_lo = (u32)(count & 0xFFFFFFFF);
+    g_instr_count_hi = (u32)(count >> 32);
+}
+extern "C" u32 wasm_get_instr_count_lo() { return g_instr_count_lo; }
+extern "C" u32 wasm_get_instr_count_hi() { return g_instr_count_hi; }
+
+extern "C" u32 wasm_get_replay_scan_lo() { return g_replay_scan_lo; }
+extern "C" u32 wasm_get_replay_scan_hi() { return g_replay_scan_hi; }
+
+// Replay N instructions synchronously (full Amiga: CPU + DMA via Moira::sync).
+// Breakpoints are suppressed so they don't fire during replay.
+extern "C" void wasm_replay_instructions_video(u32 count) {
+    auto *cpu = wrapper->emu->cpu.cpu;
+    bool hadBP = cpu->debugger.breakpoints.elements() != 0;
+    cpu->debugger.breakpoints.setNeedsCheck(false);
+
+    for (u32 i = 0; i < count; i++) {
+        cpu->execute();
+    }
+
+    if (hadBP) cpu->debugger.breakpoints.setNeedsCheck(true);
+}
+
+// Scan N instructions for a breakpoint PC match.
+// Returns the instrCount of the LATEST match (or REPLAY_NO_MATCH) in g_replay_scan_lo/hi.
+extern "C" void wasm_replay_scan(u32 count) {
+    auto *cpu = wrapper->emu->cpu.cpu;
+    bool hadBP = cpu->debugger.breakpoints.elements() != 0;
+    cpu->debugger.breakpoints.setNeedsCheck(false);
+
+    uint64_t match = REPLAY_NO_MATCH;
+    for (u32 i = 0; i < count; i++) {
+        cpu->execute();
+        if (cpu->breakpoints.isSetAt(cpu->getPC0())) {
+            match = cpu->instrCount;
+        }
+    }
+
+    if (hadBP) cpu->debugger.breakpoints.setNeedsCheck(true);
+    g_replay_scan_lo = (u32)(match & 0xFFFFFFFF);
+    g_replay_scan_hi = (u32)(match >> 32);
+}
+
+// Scan N instructions for a frame boundary (vblank entry transition).
+// Returns the instrCount of the LATEST frame boundary in g_replay_scan_lo/hi.
+extern "C" void wasm_replay_scan_frame(u32 count) {
+    auto *cpu = wrapper->emu->cpu.cpu;
+    auto *agnus = wrapper->emu->agnus.agnus;
+    bool hadBP = cpu->debugger.breakpoints.elements() != 0;
+    cpu->debugger.breakpoints.setNeedsCheck(false);
+
+    uint64_t match = REPLAY_NO_MATCH;
+    for (u32 i = 0; i < count; i++) {
+        bool wasVBlank = agnus->inVBlankArea();
+        cpu->execute();
+        if (!wasVBlank && agnus->inVBlankArea()) {
+            match = cpu->instrCount;
+        }
+    }
+
+    if (hadBP) cpu->debugger.breakpoints.setNeedsCheck(true);
+    g_replay_scan_lo = (u32)(match & 0xFFFFFFFF);
+    g_replay_scan_hi = (u32)(match >> 32);
+}
+
 // Breakpoints:
 
 extern "C" const char *wasm_list_breakpoints() {
