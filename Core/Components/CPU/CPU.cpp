@@ -11,6 +11,7 @@
 #include "CmdQueue.h"
 #include "Emulator.h"
 #include "CPU.h"
+#include "HostBridge.h" // [vscode-vamiga-debugger host bridge]
 #include "Agnus.h"
 #include "Amiga.h"
 #include "IOUtils.h"
@@ -268,6 +269,7 @@ Moira::didReachCatchpoint(u8 vector)
 void
 Moira::didReachSoftwareTrap(u32 addr)
 {
+    if (HostBridge::dispatch(*this, mem, amiga, addr)) return; // [vscode-vamiga-debugger host bridge]
     amiga.setFlag(RL::SWTRAP_REACHED);
 }
 
@@ -426,7 +428,10 @@ CPU::_didReset(bool hard)
         
         // Reset the Moira core
         Moira::reset();
-        
+
+        // [vscode-vamiga-debugger host bridge] register the UaeLib trapdoor (line-A 0xa00e)
+        HostBridge::install(debugger.swTraps);
+
         // Initialize all data and address registers with the startup value
         for(int i = 0; i < 8; i++) reg.d[i] = reg.a[i] = config.regResetVal;
         reg.a[7] = reg.isp;
