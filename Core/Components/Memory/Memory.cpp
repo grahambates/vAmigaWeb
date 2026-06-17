@@ -9,6 +9,7 @@
 
 #include "config.h"
 #include "Memory.h"
+#include "HostBridge.h" // [vscode-vamiga-debugger host bridge]
 #include "Emulator.h"
 #include "Agnus.h"
 #include "Checksum.h"
@@ -1047,6 +1048,8 @@ Memory::isUnmapped(u32 addr)
 template<> u16
 Memory::spypeek16 <Accessor::CPU, MemSrc::NONE> (u32 addr) const
 {
+    if (auto v = HostBridge::peek16(addr)) return *v; // [vscode-vamiga-debugger host bridge]
+
     switch (config.unmappingType) {
             
         case UnmappedMemory::FLOATING:   return dataBus;
