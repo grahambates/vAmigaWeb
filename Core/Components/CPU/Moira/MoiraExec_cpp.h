@@ -1371,6 +1371,9 @@ Moira::execBsr(u16 opcode)
         // Save return address on stack
         push<C, Long>(retpc);
 
+        // [vscode-vamiga-debugger cpu profiler] branch-stack: record the call.
+        if (flags & State::PROFILING) vamiga::CpuProfiler::BranchStack::push(reg.sr.s, retpc, reg.sp);
+
         // Jump to new address
         reg.pc = newpc;
         fullPrefetch<C, POLL>();
@@ -1389,6 +1392,9 @@ Moira::execBsr(u16 opcode)
 
         // Save return address on stack
         push<C, Long, POLL>(retpc);
+
+        // [vscode-vamiga-debugger cpu profiler] branch-stack: record the call.
+        if (flags & State::PROFILING) vamiga::CpuProfiler::BranchStack::push(reg.sr.s, retpc, reg.sp);
 
         // Jump to new address
         reg.pc = newpc;
@@ -2480,6 +2486,9 @@ Moira::execJsr(u16 opcode)
             // Save return address on stack
             push<C, Long>(reg.pc);
 
+            // [vscode-vamiga-debugger cpu profiler] branch-stack: record the call (reg.pc = return address).
+            if (flags & State::PROFILING) vamiga::CpuProfiler::BranchStack::push(reg.sr.s, reg.pc, reg.sp);
+
             // Jump to new address
             reg.pc = ea;
 
@@ -2533,6 +2542,9 @@ Moira::execJsr(u16 opcode)
 
             // Save return address on stack
             push<C, Long, POLL>(reg.pc);
+
+            // [vscode-vamiga-debugger cpu profiler] branch-stack: record the call (reg.pc = return address).
+            if (flags & State::PROFILING) vamiga::CpuProfiler::BranchStack::push(reg.sr.s, reg.pc, reg.sp);
 
             // Jump to new address
             reg.pc = ea;
@@ -5202,6 +5214,10 @@ Moira::execRte(u16 opcode)
     }
 
     setPC(newpc);
+
+    // [vscode-vamiga-debugger cpu profiler] branch-stack: record the exception return (always pops the supervisor stack).
+    if (flags & State::PROFILING) vamiga::CpuProfiler::BranchStack::popRte(newpc);
+
     fullPrefetch<C, POLL>();
 
     //           00  10  20        00  10  20        00  10  20
@@ -5282,6 +5298,10 @@ Moira::execRts(u16 opcode)
     }
 
     setPC(newpc);
+
+    // [vscode-vamiga-debugger cpu profiler] branch-stack: record the return.
+    if (flags & State::PROFILING) vamiga::CpuProfiler::BranchStack::popRts(reg.sr.s, newpc);
+
     fullPrefetch<C, POLL>();
 
     //           00  10  20        00  10  20        00  10  20

@@ -10,6 +10,7 @@
 #include "config.h"
 #include "Agnus.h"
 #include "Denise.h"
+#include "DmaProfiler.h" // [vscode-vamiga-debugger dma profiler]
 
 namespace vamiga {
 
@@ -154,6 +155,7 @@ Agnus::doCopperDmaRead(u32 addr)
     busAddr[pos.h] = addr;
     busData[pos.h] = result;
     stats.usage[BUS_COPPER]++;
+    if (DmaProfiler::enabled()) DmaProfiler::markCopper(pos.h, copper.dmaSubState()); // [vscode-vamiga-debugger dma profiler]
 
     return result;
 }
@@ -183,6 +185,7 @@ Agnus::doDiskDmaWrite(u16 value)
     busAddr[pos.h] = dskpt;
     busData[pos.h] = value;
     stats.usage[BUS_DISK]++;
+    if (DmaProfiler::enabled()) DmaProfiler::markWrite(pos.h, false); // [vscode-vamiga-debugger dma profiler]
 
     dskpt += 2;
 }
@@ -196,6 +199,11 @@ Agnus::doCopperDmaWrite(u32 addr, u16 value)
     busAddr[pos.h] = addr;
     busData[pos.h] = value;
     stats.usage[BUS_COPPER]++;
+    // [vscode-vamiga-debugger dma profiler] Copper MOVE register write.
+    if (DmaProfiler::enabled()) {
+        DmaProfiler::markWrite(pos.h, false);
+        DmaProfiler::markCopper(pos.h, DmaProfiler::COP_SUB_MOVE);
+    }
 }
 
 void
@@ -207,6 +215,7 @@ Agnus::doBlitterDmaWrite(u32 addr, u16 value)
     busAddr[pos.h] = addr;
     busData[pos.h] = value;
     stats.usage[BUS_BLITTER]++;
+    if (DmaProfiler::enabled()) DmaProfiler::markWrite(pos.h, false); // [vscode-vamiga-debugger dma profiler]
 }
 
 template u16 Agnus::doAudioDmaRead<0>();

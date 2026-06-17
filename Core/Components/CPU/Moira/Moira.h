@@ -486,8 +486,19 @@ public:
     
     // Sets the CPU clock cycle count
     void setClock(i64 val) { clock = val; }
-    
-    
+
+    // [vscode-vamiga-debugger cpu profiler] Enables/disables the per-instruction
+    // profiler. Setting the flag forces execute() onto the slow path, where the
+    // profiler hooks fire (see CpuProfiler.h). Zero-cost when disabled.
+    void enableProfiling() { flags |= State::PROFILING; }
+    void disableProfiling() { flags &= ~State::PROFILING; }
+
+    // [vscode-vamiga-debugger dma profiler] True if the current bus access is an
+    // instruction (program-space) fetch, derived from the m68k function code. Used by
+    // the DMA profiler to color CPU Code vs Data on the DMA line.
+    bool fcIsProgram() const { return (fcl & 3) == FC::USER_PROG; }
+
+
     //
     // Accessing registers
     //
