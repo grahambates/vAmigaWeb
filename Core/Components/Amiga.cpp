@@ -1067,7 +1067,7 @@ Amiga::computeFrame()
             if (flags & RL::MEMPROTECT_VIOLATION_REACHED) {
 
                 auto v = MemProtect::lastViolation();
-                msgQueue.put(Msg::MEMPROTECT_VIOLATION, MemProtectMsg { v.pc, v.addr, v.value, v.sizeBits });
+                msgQueue.put(Msg::MEMPROTECT_VIOLATION, MemProtectMsg { v.pc, v.addr, v.value, v.sizeBits, v.source });
                 action = pause;
             }
 

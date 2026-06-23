@@ -213,7 +213,7 @@ void instrHook(moira::Moira &cpu, Memory &mem, u32 pc)
     }
 }
 
-void checkWrite(moira::Moira &cpu, Memory &mem, Amiga &amiga, u32 addr, u32 value, int size)
+void checkWrite(moira::Moira &cpu, Memory &mem, Amiga &amiga, u32 addr, u32 value, int size, u32 source)
 {
     if (!s_enabled) return;
     if (addr < VECTOR_TABLE_END) return;
@@ -229,7 +229,7 @@ void checkWrite(moira::Moira &cpu, Memory &mem, Amiga &amiga, u32 addr, u32 valu
         if (addr >= start && addr + (u32)size <= end) return;
     }
 
-    s_lastViolation = { cpu.getPC0(), addr, value, (u32)(size * 8) };
+    s_lastViolation = { cpu.getPC0(), addr, value, (u32)(size * 8), source };
     amiga.setFlag(RL::MEMPROTECT_VIOLATION_REACHED);
 }
 

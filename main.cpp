@@ -4608,7 +4608,8 @@ extern "C" const char* wasm_get_current_message() {
             result_buffer += "\"pc\":" + std::to_string(lastMessage.memProtect.pc) + ",";
             result_buffer += "\"addr\":" + std::to_string(lastMessage.memProtect.addr) + ",";
             result_buffer += "\"value\":" + std::to_string(lastMessage.memProtect.value) + ",";
-            result_buffer += "\"sizeBits\":" + std::to_string(lastMessage.memProtect.sizeBits);
+            result_buffer += "\"sizeBits\":" + std::to_string(lastMessage.memProtect.sizeBits) + ",";
+            result_buffer += "\"source\":" + std::to_string(lastMessage.memProtect.source);
             result_buffer += "}";
             break;
 

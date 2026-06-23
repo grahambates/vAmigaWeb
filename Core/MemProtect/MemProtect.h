@@ -26,12 +26,19 @@ namespace moira { class Moira; }
 
 namespace MemProtect {
 
+// What actually performed the write: the 68k CPU executing an instruction,
+// or a DMA-driven hardware unit (Blitter, disk DMA) writing chip RAM
+// directly via Agnus, independent of the CPU.
+constexpr u32 SOURCE_CPU = 0;
+constexpr u32 SOURCE_DMA = 1;
+
 struct Violation
 {
     u32 pc;
     u32 addr;
     u32 value;
     u32 sizeBits;
+    u32 source; // SOURCE_CPU / SOURCE_DMA
 };
 
 // Enables/disables the per-write allow-list check (State::CHECK_MP).
@@ -80,9 +87,16 @@ int addRange(u32 addr, u32 size);
 // what's actually allocated.
 void instrHook(moira::Moira &cpu, Memory &mem, u32 pc);
 
-// Called on every write when State::CHECK_MP is set. `size` is the access
-// size in bytes (1/2/4 — Moira's Byte/Word/Long).
-void checkWrite(moira::Moira &cpu, Memory &mem, Amiga &amiga, u32 addr, u32 value, int size);
+// Called on every write when State::CHECK_MP is set (CPU writes), and
+// unconditionally from Agnus's DMA write path (Blitter/disk DMA — see
+// Memory::poke16<Accessor::AGNUS> in Memory.cpp; there's no CHECK_MP-style
+// flags gate there since DMA writes are far less frequent than CPU memory
+// accesses, so the cost of the always-present `if (!s_enabled) return;`
+// below isn't worth a separate fast-path flag). `size` is the access size
+// in bytes (1/2/4 — Moira's Byte/Word/Long; Agnus DMA is always 2). `cpu`
+// is used only to read the concurrently-executing PC for diagnostics, not
+// to identify the actual cause for a DMA write — see `source`.
+void checkWrite(moira::Moira &cpu, Memory &mem, Amiga &amiga, u32 addr, u32 value, int size, u32 source = SOURCE_CPU);
 
 // Retrieves the most recently recorded violation (valid only when the
 // caller is responding to RL::MEMPROTECT_VIOLATION_REACHED).

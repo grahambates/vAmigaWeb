@@ -11,6 +11,7 @@
 #include "Memory.h"
 #include "DmaProfiler.h" // [vscode-vamiga-debugger dma profiler]
 #include "HostBridge.h" // [vscode-vamiga-debugger host bridge]
+#include "MemProtect.h" // [vscode-vamiga-debugger mem protect]
 #include "Emulator.h"
 #include "Agnus.h"
 #include "Checksum.h"
@@ -1990,7 +1991,18 @@ template<> void
 Memory::poke16 <Accessor::AGNUS> (u32 addr, u16 value)
 {
     addr &= agnus.ptrMask;
-    
+
+    // [vscode-vamiga-debugger mem protect] This is the single choke point
+    // for every Agnus-driven (DMA) chip-RAM write — Blitter (both the fast
+    // and slow/cycle-exact paths) and disk DMA all funnel through here,
+    // independent of the CPU. Mirrors the CPU's own hook in
+    // MoiraDataflow_cpp.h's write<>(), which this path can't go through
+    // since it isn't CPU-driven at all. No CHECK_MP-style flags gate
+    // first (unlike the CPU path) — DMA writes are far less frequent than
+    // CPU memory accesses, so it's not worth a separate fast-path flag;
+    // checkWrite()'s own `if (!s_enabled) return;` is cheap enough.
+    MemProtect::checkWrite(cpu, *this, amiga, addr, value, 2, MemProtect::SOURCE_DMA);
+
     switch (agnusMemSrc[addr >> 16]) {
             
         case MemSrc::NONE:          poke16 <Accessor::AGNUS, MemSrc::NONE> (addr, value); return;

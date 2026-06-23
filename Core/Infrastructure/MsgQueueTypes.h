@@ -262,7 +262,7 @@ struct MsgEnum : Reflection<MsgEnum, Msg>
 
 typedef struct { u32 pc; u8 vector; } CpuMsg;
 // [vscode-vamiga-debugger mem protect]
-typedef struct { u32 pc; u32 addr; u32 value; u32 sizeBits; } MemProtectMsg;
+typedef struct { u32 pc; u32 addr; u32 value; u32 sizeBits; u32 source; } MemProtectMsg;
 typedef struct { i16 nr; i16 value; i16 volume; i16 pan; } DriveMsg;
 typedef struct { i16 nr; HdcState state; } HdcMsg;
 typedef struct { isize line; i16 delay; } ScriptMsg;
