@@ -13,6 +13,7 @@
 #include "Option.h"
 #include "Media.h"
 #include "Chrono.h"
+#include "MemProtect.h" // [vscode-vamiga-debugger mem protect]
 #include <algorithm>
 
 namespace vamiga {
@@ -1058,6 +1059,15 @@ Amiga::computeFrame()
             if (flags & RL::SWTRAP_REACHED) {
 
                 msgQueue.put(Msg::SWTRAP_REACHED, CpuMsg { cpu.getPC0(), 0 });
+                action = pause;
+            }
+
+            // [vscode-vamiga-debugger mem protect] Did we write outside the
+            // memory protection allow-list?
+            if (flags & RL::MEMPROTECT_VIOLATION_REACHED) {
+
+                auto v = MemProtect::lastViolation();
+                msgQueue.put(Msg::MEMPROTECT_VIOLATION, MemProtectMsg { v.pc, v.addr, v.value, v.sizeBits });
                 action = pause;
             }
 

@@ -26,6 +26,7 @@
 #include "OSDebugger.h"
 #include "CpuProfiler.h" // [vscode-vamiga-debugger cpu profiler]
 #include "DmaProfiler.h" // [vscode-vamiga-debugger dma profiler]
+#include "MemProtect.h" // [vscode-vamiga-debugger mem protect]
 
 #include "MemUtils.h"
 #include "MediaFileTypes.h"
@@ -2821,6 +2822,49 @@ extern "C" bool wasm_remove_catchpoint(u32 vector) {
   }
 }
 
+// [vscode-vamiga-debugger mem protect]
+extern "C" bool wasm_set_memprotect_enabled(int enabled) {
+  try {
+    vamiga::MemProtect::setEnabled(*wrapper->emu->cpu.cpu, enabled != 0);
+    return true;
+  } catch(...) {
+    return false;
+  }
+}
+
+extern "C" bool wasm_memprotect_start_tracking() {
+  try {
+    return vamiga::MemProtect::startTracking(*wrapper->emu->cpu.cpu, *wrapper->emu->amiga.amiga);
+  } catch(...) {
+    return false;
+  }
+}
+
+extern "C" bool wasm_memprotect_seed_libraries() {
+  try {
+    return vamiga::MemProtect::seedResidentLibraries(*wrapper->emu->amiga.amiga);
+  } catch(...) {
+    return false;
+  }
+}
+
+extern "C" bool wasm_memprotect_reset_ranges() {
+  try {
+    vamiga::MemProtect::resetRanges();
+    return true;
+  } catch(...) {
+    return false;
+  }
+}
+
+extern "C" bool wasm_memprotect_add_range(u32 addr, u32 size) {
+  try {
+    return vamiga::MemProtect::addRange(addr, size) >= 0;
+  } catch(...) {
+    return false;
+  }
+}
+
 extern "C" bool wasm_eol() {
   try {
     wrapper->emu->finishLine();
@@ -4555,6 +4599,16 @@ extern "C" const char* wasm_get_current_message() {
             result_buffer += "\"payload\":{";
             result_buffer += "\"pc\":" + std::to_string(lastMessage.cpu.pc) + ",";
             result_buffer += "\"vector\":" + std::to_string(lastMessage.cpu.vector);
+            result_buffer += "}";
+            break;
+
+        // [vscode-vamiga-debugger mem protect]
+        case vamiga::Msg::MEMPROTECT_VIOLATION:
+            result_buffer += "\"payload\":{";
+            result_buffer += "\"pc\":" + std::to_string(lastMessage.memProtect.pc) + ",";
+            result_buffer += "\"addr\":" + std::to_string(lastMessage.memProtect.addr) + ",";
+            result_buffer += "\"value\":" + std::to_string(lastMessage.memProtect.value) + ",";
+            result_buffer += "\"sizeBits\":" + std::to_string(lastMessage.memProtect.sizeBits);
             result_buffer += "}";
             break;
 

@@ -419,6 +419,13 @@ static constexpr int CHECK_CP       = (1 << 9);
 // [vscode-vamiga-debugger cpu profiler] Enables per-instruction profiling capture.
 static constexpr int PROFILING      = (1 << 10);
 
+// [vscode-vamiga-debugger mem protect] Enables the per-write allow-list check.
+static constexpr int CHECK_MP       = (1 << 11);
+
+// [vscode-vamiga-debugger mem protect] Enables the per-instruction AllocMem/
+// FreeMem call tracking that builds the allow-list.
+static constexpr int CHECK_MP_TRACK = (1 << 12);
+
 }
 
 /* Instruction Flags

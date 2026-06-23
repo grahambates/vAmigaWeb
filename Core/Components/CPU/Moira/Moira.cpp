@@ -10,6 +10,7 @@
 #include "Moira.h"
 #include "MoiraMacros.h"
 #include "CpuProfiler.h" // [vscode-vamiga-debugger cpu profiler]
+#include "MemProtect.h" // [vscode-vamiga-debugger mem protect]
 
 #include <cstdio>
 #include <algorithm>
@@ -361,6 +362,9 @@ Moira::execute()
             // Check if a breakpoint has been reached
             if (debugger.breakpointMatches(reg.pc0)) didReachBreakpoint(reg.pc0);
         }
+
+        // [vscode-vamiga-debugger mem protect]
+        if (flags & State::CHECK_MP_TRACK) MemProtect::instrHook(*this, mem, reg.pc0);
     }
 
     // Check the integrity of the program counter again

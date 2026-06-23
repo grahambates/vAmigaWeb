@@ -72,6 +72,7 @@ public:
     void put(const Message &msg);
     void put(Msg type, i64 payload = 0, i64 payload2 = 0);
     void put(Msg type, CpuMsg payload);
+    void put(Msg type, MemProtectMsg payload); // [vscode-vamiga-debugger mem protect]
     void put(Msg type, DriveMsg payload);
     void put(Msg type, HdcMsg payload);
     void put(Msg type, ScriptMsg payload);

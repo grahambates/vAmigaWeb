@@ -424,6 +424,9 @@ constexpr u32 COPPERWP_REACHED   = (1 << 10);
 constexpr u32 AUTO_SNAPSHOT      = (1 << 11);
 constexpr u32 USER_SNAPSHOT      = (1 << 12);
 constexpr u32 SYNC_THREAD        = (1 << 13);
+
+// [vscode-vamiga-debugger mem protect]
+constexpr u32 MEMPROTECT_VIOLATION_REACHED = (1 << 14);
 };
 
 }

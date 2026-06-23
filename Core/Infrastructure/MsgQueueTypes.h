@@ -57,6 +57,7 @@ enum class Msg : long
     CATCHPOINT_REACHED,
     SWTRAP_REACHED,
     CPU_HALT,
+    MEMPROTECT_VIOLATION, // [vscode-vamiga-debugger mem protect]
     
     // Agnus
     EOL_REACHED,
@@ -180,6 +181,9 @@ struct MsgEnum : Reflection<MsgEnum, Msg>
             case Msg::CATCHPOINT_REACHED:    return "CATCHPOINT_REACHED";
             case Msg::SWTRAP_REACHED:        return "SWTRAP_REACHED";
             case Msg::CPU_HALT:              return "CPU_HALT";
+            // Matches src/vAmiga.ts's StopMessage["name"] (and the PUAE
+            // backend's equivalent string) rather than the enum identifier.
+            case Msg::MEMPROTECT_VIOLATION:  return "MEMORY_PROTECTION_VIOLATION";
                 
             case Msg::EOL_REACHED:           return "EOL_REACHED";
             case Msg::EOF_REACHED:           return "EOF_REACHED";
@@ -257,6 +261,8 @@ struct MsgEnum : Reflection<MsgEnum, Msg>
 //
 
 typedef struct { u32 pc; u8 vector; } CpuMsg;
+// [vscode-vamiga-debugger mem protect]
+typedef struct { u32 pc; u32 addr; u32 value; u32 sizeBits; } MemProtectMsg;
 typedef struct { i16 nr; i16 value; i16 volume; i16 pan; } DriveMsg;
 typedef struct { i16 nr; HdcState state; } HdcMsg;
 typedef struct { isize line; i16 delay; } ScriptMsg;
@@ -272,6 +278,7 @@ typedef struct
     union {
         struct { i64 value; i64 value2; };
         CpuMsg cpu;
+        MemProtectMsg memProtect; // [vscode-vamiga-debugger mem protect]
         DriveMsg drive;
         HdcMsg hdc;
         ScriptMsg script;

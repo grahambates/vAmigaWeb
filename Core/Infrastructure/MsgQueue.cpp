@@ -101,6 +101,13 @@ MsgQueue::put(Msg type, CpuMsg payload)
     put( Message { .type = type, .cpu = payload } );
 }
 
+// [vscode-vamiga-debugger mem protect]
+void
+MsgQueue::put(Msg type, MemProtectMsg payload)
+{
+    put( Message { .type = type, .memProtect = payload } );
+}
+
 void
 MsgQueue::put(Msg type, DriveMsg payload)
 {

@@ -69,6 +69,7 @@ target_include_directories(VACore PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 # Add subdirectories
 add_subdirectory(Profiler) # [vscode-vamiga-debugger cpu profiler]
 add_subdirectory(HostBridge) # [vscode-vamiga-debugger host bridge]
+add_subdirectory(MemProtect) # [vscode-vamiga-debugger mem protect]
 add_subdirectory(Infrastructure)
 add_subdirectory(Components)
 add_subdirectory(FileSystems)

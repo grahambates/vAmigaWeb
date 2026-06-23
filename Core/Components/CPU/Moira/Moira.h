@@ -498,6 +498,13 @@ public:
     // the DMA profiler to color CPU Code vs Data on the DMA line.
     bool fcIsProgram() const { return (fcl & 3) == FC::USER_PROG; }
 
+    // [vscode-vamiga-debugger mem protect] Enables/disables the per-write
+    // allow-list check and the AllocMem/FreeMem tracking that builds it (see
+    // MemProtect.h). Independent of each other, matching e9k_debug_memprotect's
+    // design in the PUAE backend.
+    void setCheckMemProtect(bool value) { if (value) flags |= State::CHECK_MP; else flags &= ~State::CHECK_MP; }
+    void setCheckMemProtectTracking(bool value) { if (value) flags |= State::CHECK_MP_TRACK; else flags &= ~State::CHECK_MP_TRACK; }
+
 
     //
     // Accessing registers

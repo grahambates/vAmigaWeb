@@ -431,6 +431,9 @@ Moira::write(u32 addr, u32 val)
         didReachWatchpoint(addr);
     }
 
+    // [vscode-vamiga-debugger mem protect]
+    if (flags & State::CHECK_MP) MemProtect::checkWrite(*this, mem, amiga, addr, val, S);
+
     if constexpr (S == Byte) {
 
         if constexpr (F & POLL) POLL_IPL;
